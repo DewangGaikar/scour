@@ -1,8 +1,9 @@
 from telethon import TelegramClient
-from telethon.tl.functions.messages import ImportChatInviteRequest
-import asyncio
-from dotenv import load_dotenv
-import os
+from telethon.tl.functions.messages import ImportChatInviteRequest # for joining using telegram Invite link
+import asyncio # for async operations
+from dotenv import load_dotenv # For loading env variables
+import os # Env File access
+import re # For regular Expression
 
 load_dotenv()
 api_id=os.getenv("API_ID")
