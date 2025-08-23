@@ -7,6 +7,7 @@ import os # Env File access
 import re # For regular Expression
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 api_id=os.getenv("API_ID")
@@ -19,13 +20,24 @@ keywords=["buy","sell","target","stock","intraday","call","tip"]
 stock_tip_pattern =re.compile(r"(buy|sell)\s+[A-za-z]+\s+at\s+\d+",re.IGNORECASE)
 
 app=FastAPI()
-
+app.add_middleware(
+     CORSMiddleware,
+     allow_origins=["http://localhost:5173","http://127.0.0.1:5173"],
+     allow_methods=["GET"],
+     allow_headers=["Content-Type"],
+     allow_credentials=False,
+)
 client = TelegramClient('session_name',api_id,api_hash)
+
+@app.on_event("startup")
+async def startup_event():
+     await client.start(phone=phone_number)
+
 # goal is to join group and flag messages and tell group name if illegal
 @app.get("/get-messages")
 async def get_messages():
     # Connect and Sign-in 
-    await client.start(phone=phone_number)
+   
     if group_username:
          entity = await client.get_entity(group_username)
     elif invite_link:
