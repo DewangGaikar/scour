@@ -137,7 +137,7 @@ function App() {
                 <a
                   href={selectedGroup.channel_link}
                   className="text-blue-600 underline"
-                  target="_blank" 
+                  target="_blank"
                   rel="noreferrer"
                 >
                   {selectedGroup.channel_link}

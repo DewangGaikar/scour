@@ -1,5 +1,6 @@
 from telethon import TelegramClient
 from telethon.tl.functions.messages import ImportChatInviteRequest # for joining using telegram Invite link
+from telethon.tl.functions.channels import JoinChannelRequest # for joining public channels
 from telethon.errors import UserAlreadyParticipantError
 import asyncio # for async operations
 from dotenv import load_dotenv # For loading env variables
@@ -7,6 +8,7 @@ import os # Env File access
 import re # For regular Expression
 import uvicorn
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware #To avoid Cross Origin Resource Sharing Errors
 import json
 
@@ -24,8 +26,15 @@ with open("groups.json","r") as f:
 # for Analyzing msgs , regex
 keywords=["buy","sell","target","stock","intraday","call","tip"]
 stock_tip_pattern =re.compile(r"(buy|sell)\s+[A-za-z]+\s+at\s+\d+",re.IGNORECASE)
+client = TelegramClient('session_name',api_id,api_hash)
 
-app=FastAPI()
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+     await client.start(phone=phone_number)
+     yield
+     await client.disconnect()
+
+app=FastAPI(lifespan=lifespan)
 app.add_middleware(
      CORSMiddleware,
      allow_origins=["http://localhost:5173","http://127.0.0.1:5173"],
@@ -33,11 +42,6 @@ app.add_middleware(
      allow_headers=["Content-Type"],
      allow_credentials=False,
 )
-client = TelegramClient('session_name',api_id,api_hash)
-
-@app.on_event("startup")
-async def startup_event():
-     await client.start(phone=phone_number)
 
 # goal is to join group and flag messages and tell group name if illegal
 async def scan_groups(group):
@@ -53,10 +57,18 @@ async def scan_groups(group):
                     entity = await client(ImportChatInviteRequest(hash_part))
                except UserAlreadyParticipantError:
                     entity = await client.get_entity(group["invite_link"])
-          else:
-              username=group["invite_link"].split("/")[-1]
-              entity = await client.get_entity(username)
-          
+          elif "/" in group["invite_link"]:
+              try:
+                   username=group["invite_link"].split("/")[-1]
+                   try: 
+                        await client(JoinChannelRequest(username))
+                        entity = await client.get_entity(username)
+                   except UserAlreadyParticipantError:
+                        entity=await client.get_entity(group["invite_link"])
+              except Exception as e:
+                   print(f"Username : {username} : {group["invite_link"]} : Skipping due to Error: {e} ")
+                   return None
+
      else:
           return None
      
