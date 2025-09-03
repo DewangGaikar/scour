@@ -1,20 +1,42 @@
 // src/App.jsx
 import { useState, useEffect, useRef } from "react";
+import { supabase } from "./supabaseClient.js";
+import LoginPage from "./pages/Login"; // Your login page component
 
 function App() {
+  const [session, setSession] = useState(null);
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [error, setError] = useState(null);
   const fetchOnce = useRef(false);
-  //const [messages, setMessages] = useState([]);
 
+  // Check Supabase session on load
   useEffect(() => {
+    async function checkSession() {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+    }
+    checkSession();
+
+    const { subscription } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+      }
+    );
+
+    return () => subscription?.unsubscribe();
+  }, []);
+
+  // Fetch groups once session is active (user or guest)
+  useEffect(() => {
+    if (!session) return;
     if (fetchOnce.current) return;
     fetchOnce.current = true;
-    const fetchMessages = async () => {
+
+    const fetchGroups = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/get-messages");
-        if (!res.ok) throw new Error(`HTTP error! Status:${res.status}`);
+        const res = await fetch("http://127.0.0.1:8000/get-messages?limit=10");
+        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
         const data = await res.json();
         setGroups(Array.isArray(data) ? data : [data]);
       } catch (err) {
@@ -22,12 +44,33 @@ function App() {
         setError(err.message);
       }
     };
-    fetchMessages();
-  }, []);
 
+    fetchGroups();
+  }, [session]);
+
+  // Guest login handler
+  const handleGuestLogin = async () => {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email: `guest${Date.now()}@example.com`, // temporary guest email
+    });
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    alert("Guest login initiated. Check email for login link.");
+  };
+
+  // If no session, show login page
+  if (!session) {
+    return (
+      <LoginPage setSession={setSession} onGuestLogin={handleGuestLogin} />
+    );
+  }
+
+  // Main dashboard
   return (
     <div className="flex h-screen w-screen">
-      {/* Sidebar - 2/5 of screen */}
+      {/* Sidebar */}
       <div className="w-[20%] bg-gray-500 border-r overflow-y-auto">
         <h2 className="text-xl font-bold p-7 border-b">📌 Flagged Groups</h2>
         {groups.map((group, idx) => (
@@ -48,11 +91,10 @@ function App() {
         ))}
       </div>
 
-      {/* Right pane - 3/5 of screen */}
+      {/* Right pane */}
       <div className="w-[60%] flex flex-col">
         {selectedGroup ? (
           <>
-            {/* Header */}
             <div className="p-4 border-b shadow-sm bg-gray-700">
               <h2 className="text-lg font-bold">
                 {selectedGroup.channel_name}
@@ -67,35 +109,28 @@ function App() {
               </a>
             </div>
 
-            {/* Messages styled like WhatsApp */}
             <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
               {selectedGroup.flagged_messages.length > 0 ? (
                 <div className="flex flex-col space-y-3">
-                  {selectedGroup.flagged_messages.map((msg, i) => {
-                    const formatMessage = (text) => {
-                      return text
-                        .replace(/\*(.*?)\*/g, "<b>$1</b>") // *bold*
-                        .replace(/_(.*?)_/g, "<i>$1</i>") // _italic_
-                        .replace(/~(.*?)~/g, "<s>$1</s>") // ~strike~
-                        .replace(/`(.*?)`/g, "<code>$1</code>"); // `mono`
-                    };
-
-                    return (
-                      <div key={i} className="flex justify-start">
-                        <div className="max-w-md p-3 rounded-2xl shadow-md text-sm break-words bg-white text-gray-900 rounded-bl-none">
-                          <div
-                            className="whitespace-pre-wrap"
-                            dangerouslySetInnerHTML={{
-                              __html: formatMessage(msg),
-                            }}
-                          />
-                          <div className="text-[10px] text-gray-500 text-right mt-1">
-                            10:{i.toString().padStart(2, "0")} AM
-                          </div>
+                  {selectedGroup.flagged_messages.map((msg, i) => (
+                    <div key={i} className="flex justify-start">
+                      <div className="max-w-md p-3 rounded-2xl shadow-md text-sm break-words bg-white text-gray-900 rounded-bl-none">
+                        <div
+                          className="whitespace-pre-wrap"
+                          dangerouslySetInnerHTML={{
+                            __html: msg
+                              .replace(/\*(.*?)\*/g, "<b>$1</b>")
+                              .replace(/_(.*?)_/g, "<i>$1</i>")
+                              .replace(/~(.*?)~/g, "<s>$1</s>")
+                              .replace(/`(.*?)`/g, "<code>$1</code>"),
+                          }}
+                        />
+                        <div className="text-[10px] text-gray-500 text-right mt-1">
+                          10:{i.toString().padStart(2, "0")} AM
                         </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <p className="text-gray-500">No flagged messages found.</p>
@@ -109,11 +144,10 @@ function App() {
         )}
       </div>
 
-      {/* Group Details Panel - 20% */}
+      {/* Group Details */}
       <div className="w-[20%] bg-gray-200 border-l p-4 overflow-y-auto flex flex-col items-center text-black">
         {selectedGroup ? (
           <>
-            {/* Group profile picture */}
             <img
               src={
                 selectedGroup.profile_picture ||
@@ -122,11 +156,9 @@ function App() {
               alt={`${selectedGroup.channel_name} Profile`}
               className="w-24 h-24 rounded-full mb-4 object-cover shadow-md"
             />
-
             <h2 className="text-lg font-bold mb-4 text-center">
               Group Details
             </h2>
-
             <div className="w-full text-left">
               <p className="mb-2">
                 <span className="font-semibold">Name:</span>{" "}
@@ -147,7 +179,6 @@ function App() {
                 <span className="font-semibold">Flagged Messages:</span>{" "}
                 {selectedGroup.flagged_messages.length}
               </p>
-              {/* Add more group info here */}
             </div>
           </>
         ) : (
@@ -159,4 +190,5 @@ function App() {
     </div>
   );
 }
+
 export default App;

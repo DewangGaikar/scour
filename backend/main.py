@@ -7,16 +7,21 @@ from dotenv import load_dotenv # For loading env variables
 import os # Env File access
 import re # For regular Expression
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI,Query
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware #To avoid Cross Origin Resource Sharing Errors
 import json
+from supabase import create_client,client
 
 load_dotenv()
 api_id=os.getenv("API_ID")
 api_hash=os.getenv("API_HASH")
 group_username=""
 phone_number =os.getenv("PHONE_NUMBER")
+url=os.getenv("SUPABASE_URL")
+key=os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+pub_key=os.getenv("SUPABASE_ANON_KEY")
+supabase = create_client(url,key)
 
 #Load Json File for groups/Public Channels
 with open("groups.json","r") as f:
@@ -44,33 +49,52 @@ app.add_middleware(
 )
 
 # goal is to join group and flag messages and tell group name if illegal
-async def scan_groups(group):
+async def scan_groups(invite_link:str):
      #Join group and scan messages
      entity=None
 
-     if group.get("id"):
-          entity= await client.get_entity(group["id"])
-     elif group.get("invite_link"):
-          if "+" in group["invite_link"]:
-               hash_part=group["invite_link"].split("+")[1]
+     try:
+          if "+"  in invite_link :
+               hash_part = invite_link.split("+")[1]
                try:
-                    entity = await client(ImportChatInviteRequest(hash_part))
+                    await client(ImportChatInviteRequest(hash_part))
+                    entity = await client.get_entity(invite_link)
                except UserAlreadyParticipantError:
-                    entity = await client.get_entity(group["invite_link"])
-          elif "/" in group["invite_link"]:
-              try:
-                   username=group["invite_link"].split("/")[-1]
-                   try: 
-                        await client(JoinChannelRequest(username))
-                        entity = await client.get_entity(username)
-                   except UserAlreadyParticipantError:
-                        entity=await client.get_entity(group["invite_link"])
-              except Exception as e:
-                   print(f"Username : {username} : {group["invite_link"]} : Skipping due to Error: {e} ")
-                   return None
+                    entity = await client.get_entity(invite_link)     
+          elif  "/joinchat/" in invite_link:
+               username=invite_link.split("/joinchat/")[1]
+               try:
+                    await client(ImportChatInviteRequest(username))
+                    entity = await client.get_entity(invite_link)
+               except UserAlreadyParticipantError:
+                    try:
+                         entity = await client.get_entity(username)
+                    except:
+                         entity = await client.get_entity(invite_link)
+          elif "/c/" in invite_link:
+               parts=invite_link.split("/")
+               chat_id=int("-100" + parts[-2])
+               entity= await client.get_entity(chat_id)
 
-     else:
-          return None
+          elif "/" in invite_link:
+               username = invite_link.split("/")[-1]
+               try:
+                    await client(JoinChannelRequest(username))
+                    entity=await client.get_entity(username)
+               except UserAlreadyParticipantError:
+                    entity = await client.get_entity(username)
+          # elif "@" in invite_link: 
+          #      username=invite_link.strip("@")
+          #      try:
+          #           await client(JoinChannelRequest(username))
+          #      except UserAlreadyParticipantError:
+          #           entity = await.get_entity(username)
+     
+     except Exception as e:
+          print(f"Skipping {invite_link} due to error {e}")
+
+     if not entity:
+          return None  
      
      messages=[]
      async for message in client.iter_messages(entity,limit=100):
@@ -84,18 +108,59 @@ async def scan_groups(group):
                flagged=True
                flagged_messages.append(msg)
 
+     group_record=(
+          supabase.table("groups")
+          .select("group_id")
+          .eq("invite_link",invite_link)
+          .execute()
+     )
+
+     if group_record.data:
+          group_id=group_record.data[0]["group_id"]
+          supabase.table("groups").update(
+               {
+                    "group_name":entity.title if hasattr(entity,"title") else str(entity.id),
+                    "member_count":getattr(entity,"participants_count",None),
+                    "flagged":flagged,
+               }
+          ).eq("group_id",group_id).execute()
+
+     else:
+          inserted=supabase.table("groups").insert(
+               {
+                    "invite_link":invite_link,
+                    "group_name":entity.title if hasattr(entity,"title") else str (entity.id),
+                    "member_count":getattr(entity,"participants_count",None),
+                    "flagged":flagged,
+               }
+          ).execute()
+          group_id =inserted.data[0]["group_id"]
+
+     for msg in flagged_messages:
+          supabase.table("group_messages").insert(
+               {
+                    "group_id":group_id,
+                    "message_text":msg,
+                    "flagged_reason": "stock_tip_pattern" if stock_tip_pattern.search(msg) else "keyword_match",
+
+               }
+          ).execute()
+
      return{
           "channel_name": entity.title if hasattr(entity,"title") else str(entity.id),
-          "channel_link": group.get("id") or group.get("invite_link"),
+          "channel_link": invite_link,
           "flagged": flagged,
           "flagged_messages": flagged_messages,
      }
 
 @app.get("/get-messages")
-async def get_messages():
+async def get_messages(limit:int=Query(5,ge=1,le=50)):
     results=[]
-    for group in groups_config:
-         result = await scan_groups(group)
+    groups=supabase.table("found_links").select("invite_link").execute()
+    for i,group in enumerate(groups.data):
+         if i>=limit:
+              break
+         result = await scan_groups(group["invite_link"])
          if result:
               results.append(result)
          await asyncio.sleep(2)
