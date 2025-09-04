@@ -1,14 +1,26 @@
 // src/App.jsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient.js";
-import LoginPage from "./pages/Login"; // Your login page component
+import LoginPage from "./pages/Login";
+import GroupsPage from "./pages/GroupsPage";
+import Dashboard from "./pages/Dashboard";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import {
+  Menu,
+  X,
+  Settings,
+  Filter,
+  Home,
+  Users,
+  History,
+  Link as LinkIcon,
+  MessageSquare,
+} from "lucide-react";
+import GroupLinksPage from "./pages/GroupLinksPage.jsx";
 
 function App() {
   const [session, setSession] = useState(null);
-  const [groups, setGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [error, setError] = useState(null);
-  const fetchOnce = useRef(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Check Supabase session on load
   useEffect(() => {
@@ -27,167 +39,133 @@ function App() {
     return () => subscription?.unsubscribe();
   }, []);
 
-  // Fetch groups once session is active (user or guest)
-  useEffect(() => {
-    if (!session) return;
-    if (fetchOnce.current) return;
-    fetchOnce.current = true;
-
-    const fetchGroups = async () => {
-      try {
-        const res = await fetch("http://127.0.0.1:8000/get-messages?limit=10");
-        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
-        const data = await res.json();
-        setGroups(Array.isArray(data) ? data : [data]);
-      } catch (err) {
-        console.error("Fetch Error:", err);
-        setError(err.message);
-      }
-    };
-
-    fetchGroups();
-  }, [session]);
-
-  // Guest login handler
+  // Guest login handler via backend API
   const handleGuestLogin = async () => {
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email: `guest${Date.now()}@example.com`, // temporary guest email
-    });
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      const res = await fetch("http://127.0.0.1:5000/api/guest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (data.error) {
+        alert(`Guest login failed: ${data.error}`);
+        return;
+      }
+
+      // Store session in state or localStorage
+      setSession(data.session);
+
+      console.log("Guest login successful:", data.user.id);
+      alert("Logged in as guest!");
+    } catch (err) {
+      console.error("Guest login error:", err);
+      alert("Something went wrong while logging in as guest.");
     }
-    alert("Guest login initiated. Check email for login link.");
   };
 
-  // If no session, show login page
+  // Show login page if no session
   if (!session) {
     return (
       <LoginPage setSession={setSession} onGuestLogin={handleGuestLogin} />
     );
   }
 
-  // Main dashboard
   return (
-    <div className="flex h-screen w-screen">
-      {/* Sidebar */}
-      <div className="w-[20%] bg-gray-500 border-r overflow-y-auto">
-        <h2 className="text-xl font-bold p-7 border-b">📌 Flagged Groups</h2>
-        {groups.map((group, idx) => (
-          <div
-            key={idx}
-            onClick={() => setSelectedGroup(group)}
-            className={`p-4 cursor-pointer border-b hover:bg-gray-900 text-black-700 transition ${
-              selectedGroup?.channel_name === group.channel_name
-                ? "bg-gray-700 text-black-700"
-                : ""
-            }`}
+    <Router>
+      <div className="flex h-screen w-screen bg-gray-900 text-white">
+        {/* Sidebar */}
+        <div
+          className={`${
+            sidebarOpen ? "w-64" : "w-16"
+          } bg-gray-800 p-4 flex flex-col transition-all duration-300`}
+        >
+          {/* Toggle button */}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="mb-6 flex items-center justify-center w-10 h-10 rounded-lg bg-gray-700 hover:bg-gray-600"
           >
-            <h3 className="font-semibold">{group.channel_name}</h3>
-            <p className="text-sm text-gray-600">
-              {group.flagged_messages.length} flagged messages
-            </p>
-          </div>
-        ))}
-      </div>
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
 
-      {/* Right pane */}
-      <div className="w-[60%] flex flex-col">
-        {selectedGroup ? (
-          <>
-            <div className="p-4 border-b shadow-sm bg-gray-700">
-              <h2 className="text-lg font-bold">
-                {selectedGroup.channel_name}
-              </h2>
-              <a
-                href={selectedGroup.channel_link}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 text-sm underline"
-              >
-                {selectedGroup.channel_link}
-              </a>
-            </div>
+          {/* Sidebar Links */}
+          <nav className="flex flex-col gap-4">
+            <Link
+              to="/dashboard"
+              className="flex items-center gap-2 hover:bg-gray-700 p-2 rounded-lg"
+            >
+              <Home size={20} />
+              {sidebarOpen && <span>Dashboard</span>}
+            </Link>
+            <Link
+              to="/groups"
+              className="flex items-center gap-2 hover:bg-gray-700 p-2 rounded-lg"
+            >
+              <MessageSquare size={20} />
+              {sidebarOpen && <span>Group Messages</span>}
+            </Link>
+            {/* <Link
+              to="/groups"
+              className="flex items-center gap-2 hover:bg-gray-700 p-2 rounded-lg"
+            >
+              <History size={20} />
+              {sidebarOpen && <span>Groups History</span>}
+            </Link> */}
+            <Link
+              to="/links"
+              className="flex items-center gap-2 hover:bg-gray-700 p-2 rounded-lg"
+            >
+              <LinkIcon size={20} />
+              {sidebarOpen && <span>Groups Links</span>}
+            </Link>
+            <Link
+              to="/filters"
+              className="flex items-center gap-2 hover:bg-gray-700 p-2 rounded-lg"
+            >
+              <Filter size={20} />
+              {sidebarOpen && <span>Filters</span>}
+            </Link>
+            <Link
+              to="/settings"
+              className="flex items-center gap-2 hover:bg-gray-700 p-2 rounded-lg"
+            >
+              <Settings size={20} />
+              {sidebarOpen && <span>Settings</span>}
+            </Link>
+          </nav>
+        </div>
 
-            <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
-              {selectedGroup.flagged_messages.length > 0 ? (
-                <div className="flex flex-col space-y-3">
-                  {selectedGroup.flagged_messages.map((msg, i) => (
-                    <div key={i} className="flex justify-start">
-                      <div className="max-w-md p-3 rounded-2xl shadow-md text-sm break-words bg-white text-gray-900 rounded-bl-none">
-                        <div
-                          className="whitespace-pre-wrap"
-                          dangerouslySetInnerHTML={{
-                            __html: msg
-                              .replace(/\*(.*?)\*/g, "<b>$1</b>")
-                              .replace(/_(.*?)_/g, "<i>$1</i>")
-                              .replace(/~(.*?)~/g, "<s>$1</s>")
-                              .replace(/`(.*?)`/g, "<code>$1</code>"),
-                          }}
-                        />
-                        <div className="text-[10px] text-gray-500 text-right mt-1">
-                          10:{i.toString().padStart(2, "0")} AM
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500">No flagged messages found.</p>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center justify-center flex-1 text-gray-500">
-            Select a group to view flagged messages
-          </div>
-        )}
-      </div>
+        {/* Main content */}
+        <div className="flex-1 overflow-auto scrollbar-hide">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/links" element={<GroupLinksPage />} />
 
-      {/* Group Details */}
-      <div className="w-[20%] bg-gray-200 border-l p-4 overflow-y-auto flex flex-col items-center text-black">
-        {selectedGroup ? (
-          <>
-            <img
-              src={
-                selectedGroup.profile_picture ||
-                "https://i.pravatar.cc/150?img=12"
-              }
-              alt={`${selectedGroup.channel_name} Profile`}
-              className="w-24 h-24 rounded-full mb-4 object-cover shadow-md"
+            <Route
+              path="/links"
+              element={<div className="text-xl">📌 Groups Links Page</div>}
             />
-            <h2 className="text-lg font-bold mb-4 text-center">
-              Group Details
-            </h2>
-            <div className="w-full text-left">
-              <p className="mb-2">
-                <span className="font-semibold">Name:</span>{" "}
-                {selectedGroup.channel_name}
-              </p>
-              <p className="mb-2">
-                <span className="font-semibold">Link:</span>{" "}
-                <a
-                  href={selectedGroup.channel_link}
-                  className="text-blue-600 underline"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {selectedGroup.channel_link}
-                </a>
-              </p>
-              <p className="mb-2">
-                <span className="font-semibold">Flagged Messages:</span>{" "}
-                {selectedGroup.flagged_messages.length}
-              </p>
-            </div>
-          </>
-        ) : (
-          <p className="text-gray-500 text-center">
-            Select a group to view details
-          </p>
-        )}
+            <Route
+              path="/filters"
+              element={<div className="text-xl">⚡ Filters Page</div>}
+            />
+            <Route
+              path="/settings"
+              element={<div className="text-xl">⚙️ Settings Page</div>}
+            />
+          </Routes>
+        </div>
       </div>
-    </div>
+    </Router>
   );
 }
 
