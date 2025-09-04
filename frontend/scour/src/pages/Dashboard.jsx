@@ -9,6 +9,7 @@ import {
 import { Button } from "../components/ui/button";
 import { supabase } from "../supabaseClient";
 import axios from "axios";
+import GroupLinkChecker from "../components/GroupLinkChecker";
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [logs, setLogs] = useState([]); // live output
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [checkerOpen, setCheckerOpen] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -83,7 +85,7 @@ export default function Dashboard() {
           .slice(0, 5)
           .map((g) => ({
             name: g.group_name,
-            result: g.flagged ? "Flagged" : "OK",
+            result: g.flagged ? "Unsafe" : "OK",
           }));
 
         // Update state
@@ -101,8 +103,11 @@ export default function Dashboard() {
       }
     }
 
-    fetchData();
-  }, []);
+    // fetchData();
+    if (!loading) {
+      fetchData();
+    }
+  }, [loading]);
 
   // Timer effect to reduce cooldown every second
   useEffect(() => {
@@ -186,7 +191,9 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6 bg-gray-950 h-screen text-white overflow-y-auto scrollbar-hide">
-      <h1 className="text-2xl font-bold mb-4">📊 Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        📊 Telegram Groups Monitoring Dashboard
+      </h1>
 
       {/* Action Buttons */}
       <div className="flex space-x-4 mb-4">
@@ -197,7 +204,12 @@ export default function Dashboard() {
           }
           disabled={loading}
         >
-          Start Scanning Internet for Groups
+          {loading && (
+            <span className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+          )}
+          {loading
+            ? "Scanning Internet for Telegram Channels..."
+            : "Start Scanning Internet for Telegram Channels"}
         </Button>
         <div>
           <Button
@@ -205,6 +217,10 @@ export default function Dashboard() {
             onClick={handleScan}
             disabled={loading || cooldown > 0}
           >
+            {loading && (
+              <span className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+            )}
+
             {loading
               ? "Scanning Groups for Malicious Messages..."
               : "Start Scanning Groups for Malicious Messages"}
@@ -216,8 +232,25 @@ export default function Dashboard() {
           onClick={handleLeaveAllGroups}
           disabled={loading}
         >
-          Leave all currently joined groups
+          {loading && (
+            <span className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+          )}
+          {loading
+            ? "Leaving all currently joined channels..."
+            : "Leave all currently joined channels"}
         </Button>
+        <Button
+          className="bg-blue-600 hover:bg-blue-700"
+          onClick={() => setCheckerOpen(true)} // <-- use state to show overlay
+          disabled={loading}
+        >
+          Telegram Link Safety Checker
+        </Button>
+
+        {/* Overlay component */}
+        {checkerOpen && (
+          <GroupLinkChecker onClose={() => setCheckerOpen(false)} />
+        )}
       </div>
 
       {/* Stats */}
@@ -275,7 +308,7 @@ export default function Dashboard() {
                 >
                   <span>{g.name}</span>
                   <span className="text-red-400">
-                    {g.flaggedMessages} flagged
+                    {g.flaggedMessages} Unsafe Messages
                   </span>
                 </li>
               ))
@@ -329,26 +362,29 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-      {/*status lines*/}
-      <Card className="bg-gray-900">
-        <CardHeader className="text-2xl font-bold mb-2 ">
-          <CardTitle>🚀 Real-Time Scanner Updates</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="bg-gray-900 p-4 rounded shadow h-24 overflow-hidden">
-            {logs.length === 0 ? (
-              <p className="text-gray-400 text-sm">Logs will appear here...</p>
-            ) : (
-              <div className="text-sm space-y-1">
-                {/* Show only the last 2 lines */}
-                {logs.slice(-2).map((line, idx) => (
-                  <p key={idx}>{line}</p>
-                ))}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
+
+// {
+//   /*status lines*/
+// }
+// <Card className="bg-gray-900">
+//   <CardHeader className="text-2xl font-bold mb-2 ">
+//     <CardTitle>🚀 Real-Time Scanner Updates</CardTitle>
+//   </CardHeader>
+//   <CardContent>
+//     <div className="bg-gray-900 p-4 rounded shadow h-24 overflow-hidden">
+//       {logs.length === 0 ? (
+//         <p className="text-gray-400 text-sm">Logs will appear here...</p>
+//       ) : (
+//         <div className="text-sm space-y-1">
+//           {/* Show only the last 2 lines */}
+//           {logs.slice(-2).map((line, idx) => (
+//             <p key={idx}>{line}</p>
+//           ))}
+//         </div>
+//       )}
+//     </div>
+//   </CardContent>
+// </Card>;

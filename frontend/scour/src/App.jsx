@@ -84,7 +84,7 @@ function App() {
         {/* Sidebar */}
         <div
           className={`${
-            sidebarOpen ? "w-64" : "w-16"
+            sidebarOpen ? "w-56" : "w-16"
           } bg-gray-800 p-4 flex flex-col transition-all duration-300`}
         >
           {/* Toggle button */}
@@ -125,7 +125,7 @@ function App() {
               <LinkIcon size={20} />
               {sidebarOpen && <span>Groups Links</span>}
             </Link>
-            <Link
+            {/* <Link
               to="/filters"
               className="flex items-center gap-2 hover:bg-gray-700 p-2 rounded-lg"
             >
@@ -138,7 +138,7 @@ function App() {
             >
               <Settings size={20} />
               {sidebarOpen && <span>Settings</span>}
-            </Link>
+            </Link> */}
           </nav>
         </div>
 
