@@ -1,27 +1,23 @@
-# Web Framework
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-
-# Telegram API
-telethon==1.36.0
-
-# Env vars
+# FastAPI & server
+fastapi==0.103.2
+uvicorn[standard]==0.23.2
 python-dotenv==1.0.1
 
+# Telegram client
+telethon==1.35.1
+
 # HTTP requests & scraping
-requests==2.32.3
-beautifulsoup4==4.12.3
-duckduckgo-search==5.3.1  # corresponds to ddgs
+requests==2.31.0
+beautifulsoup4==4.12.2
+ddgs==0.1.8
 
 # Supabase client
-supabase==2.10.0
+supabase==2.2.1
 
-# Timezone handling
-pytz==2024.2
+# Time & NLP
+pytz==2023.3
+spacy==3.6.0
+textblob==0.17.1
 
-# NLP
-spacy==3.8.2
-textblob==0.18.0.post0
-
-# Utilities
-asyncio==3.4.3  # (note: Python 3.10+ has asyncio built-in, may not be needed)
+# Optional: for compilation issues (C compiler & wheel)
+wheel==0.41.2
