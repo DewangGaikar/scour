@@ -22,6 +22,8 @@ pytz==2024.2
 # --- NLP ---
 spacy==3.7.5          # ✅ works with Python 3.11 (avoid 3.8.x, which is breaking)
 textblob==0.18.0.post0
+blis==0.7.11
+
 # Install the English model at build time:
 # python -m spacy download en_core_web_sm
 
