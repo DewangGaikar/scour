@@ -1,31 +1,29 @@
-
-# Web Framework
+# --- Web Framework ---
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 
-# Telegram API
+# --- Telegram API ---
 telethon==1.36.0
 
-# Env vars
+# --- Env vars ---
 python-dotenv==1.0.1
 
-# HTTP requests & scraping
+# --- HTTP requests & scraping ---
 requests==2.32.3
 beautifulsoup4==4.12.3
 duckduckgo-search==5.3.1  # corresponds to ddgs
 
-# Supabase client
+# --- Supabase client ---
 supabase==2.10.0
 
-# Timezone handling
+# --- Timezone handling ---
 pytz==2024.2
 
-# NLP
-spacy==3.8.2
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+# --- NLP ---
+spacy==3.7.5          # ✅ works with Python 3.11 (avoid 3.8.x, which is breaking)
 textblob==0.18.0.post0
+# Install the English model at build time:
+# python -m spacy download en_core_web_sm
 
-# Utilities
-asyncio==3.4.3  # (note: Python 3.10+ has asyncio built-in, may not be needed)
-
-
+# --- Utilities ---
+# asyncio is built into Python 3.11, so don’t pin it
