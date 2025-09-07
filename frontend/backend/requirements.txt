@@ -1,0 +1,13 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+telethon==1.36.0
+python-dotenv==1.0.1
+requests==2.32.3
+beautifulsoup4==4.12.3
+ddgs>=5.4.0
+supabase==2.10.0
+pytz==2024.2
+spacy[cpu]==3.7.2
+textblob==0.18.0.post0
+blis==0.7.11
+numpy==1.26.4

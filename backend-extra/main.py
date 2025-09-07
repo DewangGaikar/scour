@@ -13,15 +13,16 @@ from ddgs import DDGS
 import uvicorn
 from fastapi import FastAPI, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from supabase import create_client
 import pytz
+import spacy
+from textblob import TextBlob
 
 # ------------------ Load Env ------------------
-# load_dotenv() commented for loading docker env 
+load_dotenv()
 
 # ------------------ Supabase ------------------
 url = os.getenv("SUPABASE_URL")
@@ -34,38 +35,31 @@ api_hash = os.getenv("API_HASH")
 phone_number = os.getenv("PHONE_NUMBER")
 client = TelegramClient("session_name", api_id, api_hash)
 
+# ------------------ NLP ------------------
+nlp = spacy.load("en_core_web_sm")  # Use small model, fast for Named Entities
+
 # ------------------ Keywords & Patterns ------------------
-keywords = [
-    "intraday call", "stock tip", "trading signal", "nifty", "sensex",
-    "SEBI registered", "premium call", "stock market", "multibagger",
-    "target price", "short term call", "long term call", "pump and dump",
-    "option call", "futures call", "equity research", "paid mentorship",
-    "stock recommendation", "buy above", "sell below", "investment advice"
+telegram_keywords = [
+    "buy", "sell", "target", "stock", "intraday", "call", "tip", "signal", 
+    "profit", "loss", "broker", "registered", "SEBI", "investment", "trade", 
+    "alerts", "trading", "equity", "nifty", "sensex", "shares"
 ]
-
-# Regex patterns
-stock_tip_pattern = re.compile(
-    r"(buy|sell)\s+[A-Z]{2,6}\s+(at|above|below)\s+\d+",
-    re.IGNORECASE
-)
-
-promotion_pattern = re.compile(
-    r"(join\s+premium|subscribe\s+now|limited\s+offer|dm\s+for\s+calls)",
-    re.IGNORECASE
-)
-
-
-# ------------------ SearchWeb Integration ------------------
-telegram_regex = r"(https?://t\.me/[a-zA-Z0-9_]+)"
 
 internet_keywords = [
-    "telegram stock tips group",
-    "telegram sebi registered stock tips",
-    "telegram intraday tips",
-    "telegram real time stock signals",
-    "best telegram stock market groups"
+    "telegram stock tips group", "telegram sebi registered stock tips",
+    "telegram intraday tips", "telegram real time stock signals", 
+    "best telegram stock market groups", "telegram trading alerts", 
+    "telegram investment tips", "telegram day trading signals"
 ]
 
+# Improved regex for telegram invite links
+telegram_regex = re.compile(
+    r"(https?://t\.me/(joinchat/)?(\+?[a-zA-Z0-9_-]{5,})|https?://t\.me/c/\d+/[0-9]+)"
+)
+
+stock_tip_pattern = re.compile(r"(buy|sell)\s+[A-Za-z]+\s+at\s+\d+", re.IGNORECASE)
+
+# ------------------ SearchWeb Integration ------------------
 def fetch_search_results(query, max_results=10):
     urls = []
     with DDGS() as ddgs:
@@ -80,8 +74,7 @@ def scrape_telegram_links(url):
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
             text = soup.get_text(" ", strip=True)
-            found = re.findall(telegram_regex, text)
-            links.extend(found)
+            links.extend(telegram_regex.findall(text))
 
             for a in soup.find_all("a", href=True):
                 if "t.me" in a["href"]:
@@ -126,9 +119,9 @@ async def scan_new_groups():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if os.path.exists("session_name.session"):
-        await client.start()  # uses saved session
+        await client.start()
     else:
-        await client.start(phone=phone_number)  # first-time login, interactive
+        await client.start(phone=phone_number)
     yield
     await client.disconnect()
 
@@ -144,126 +137,7 @@ app.add_middleware(
 class SingleLink(BaseModel):
     invite_link: str
 
-# ------------------ API Routes ------------------
-@app.post("/check-single-link")
-async def check_single_link(data: SingleLink):
-    result = await scan_group(data.invite_link)
-    if result is None:
-        return {"error": "Invalid or unreachable group link."}
-    return {
-        "group_name": result.get("channel_name"),
-        "flagged": result.get("flagged"),
-        "flagged_messages": result.get("flagged_messages"),
-        "channel_link": result.get("channel_link"),
-    }
-
-@app.get("/joined-groups-count")
-async def trigger_joined_groups_count():
-    count = await get_joined_groups_count()
-    return {"joined_groups_count": count}
-
-@app.post("/scan-internet")
-async def trigger_scan_internet(background_tasks: BackgroundTasks):
-    background_tasks.add_task(scan_new_groups)
-    return {"status": "Scanning started"}
-
-@app.post("/scan-groups")
-async def trigger_scan_existing_groups(background_tasks: BackgroundTasks):
-    background_tasks.add_task(scan_existing_groups)
-    return {"status": "Group scanning started"}
-
-@app.post("/list-groups")
-async def trigger_list_groups(background_tasks: BackgroundTasks):
-    background_tasks.add_task(list_groups)
-    return {"status": "Group Listing started"}
-
-@app.get("/get-messages")
-async def get_messages(limit: int = Query(5, ge=1, le=100)):
-    results = []
-    today = datetime.now(pytz.UTC).date()
-
-    groups = supabase.table("found_links") \
-        .select("found_id, invite_link, last_scanned_at, valid_link") \
-        .eq("valid_link", True).execute()
-    groups_data = groups.data or []
-
-    if not groups_data:
-        print("No valid links found to scan.")
-        return {"results": []}
-
-    never_scanned = [g for g in groups_data if not g.get("last_scanned_at")]
-    not_scanned_today = [
-        g for g in groups_data
-        if g.get("last_scanned_at") and datetime.fromisoformat(g["last_scanned_at"]).date() < today
-    ]
-
-    groups_to_scan = never_scanned or not_scanned_today or groups_data
-
-    for i, group in enumerate(groups_to_scan):
-        if i >= limit:
-            break
-        invite_link = group["invite_link"]
-        print(f"Starting scan for {invite_link}")
-        result = await scan_group(invite_link)
-        if result:
-            if "cooldown" in result:
-                print(f"Flood detected. Cooldown: {result['cooldown']}s for {invite_link}")
-                return {"cooldown": result["cooldown"], "invite_link": invite_link}
-            results.append(result)
-            supabase.table("found_links").update({
-                "last_scanned_at": datetime.now(pytz.UTC).isoformat()
-            }).eq("found_id", group["found_id"]).execute()
-        await asyncio.sleep(2)
-    return {"results": results}
-
-@app.post("/leave-all-groups")
-async def leave_all_groups():
-    SKIP_GROUPS = [-2300365028]
-    dialogs = await client.get_dialogs()
-    left = []
-    skipped = []
-
-    for dialog in dialogs:
-        entity = dialog.entity
-        if not hasattr(entity, "id"):
-            continue
-        if entity.id in SKIP_GROUPS:
-            skipped.append({"id": entity.id, "title": getattr(entity, "title", "Unknown")})
-            continue
-        try:
-            await client(LeaveChannelRequest(entity))
-            left.append({"id": entity.id, "title": getattr(entity, "title", "Unknown")})
-        except Exception as e:
-            left.append({"id": entity.id, "title": getattr(entity, "title", "Unknown"), "error": str(e)})
-
-    return {"left": left, "skipped": skipped}
-
-# ------------------ Utility Functions ------------------
-async def get_joined_groups_count():
-    count = 0
-    dialogs = await client.get_dialogs()
-    for dialog in dialogs:
-        entity = dialog.entity
-        if getattr(entity, "megagroup", False) or getattr(entity, "broadcast", False):
-            count += 1
-        elif entity.__class__.__name__ in ["Chat", "Channel"]:
-            count += 1
-    return count 
-
-async def list_groups():
-    dialogs = await client.get_dialogs()
-    groups = []
-    for dialog in dialogs:
-        entity = dialog.entity
-        if getattr(entity, "megagroup", False) or getattr(entity, "broadcast", False):
-            groups.append({
-                "id": entity.id,
-                "title": getattr(entity, "title", None),
-                "username": getattr(entity, "username", None)
-            })
-    return groups
-
-# ------------------ Core Logic ------------------
+# ------------------ Telegram Scanning Core ------------------
 async def scan_group(invite_link: str):
     entity = None
     try:
@@ -293,9 +167,7 @@ async def scan_group(invite_link: str):
             except UserAlreadyParticipantError:
                 entity = await client.get_entity(username)
     except FloodWaitError as e:
-        wait_seconds = e.seconds
-        print(f"FloodWaitError! Wait {wait_seconds} seconds before retry.")
-        return {"cooldown": wait_seconds, "invite_link": invite_link}
+        return {"cooldown": e.seconds, "invite_link": invite_link}
     except Exception as e:
         print(f"Skipping {invite_link} due to error: {e}")
         supabase.table("found_links").update({"valid_link": False}).eq("invite_link", invite_link).execute()
@@ -306,15 +178,27 @@ async def scan_group(invite_link: str):
         return None
 
     messages = [msg.text for msg in await client.get_messages(entity, limit=100) if msg.text]
-    # flagged_messages = [msg for msg in messages if any(kw.lower() in msg.lower() for kw in keywords) or stock_tip_pattern.search(msg)]
+
+    # ------------------ Pre-NLP filtering ------------------
     flagged_messages = [
-    msg for msg in messages
-    if any(kw.lower() in msg.lower() for kw in keywords)
-    or stock_tip_pattern.search(msg)
-    or promotion_pattern.search(msg)
-]
+        msg for msg in messages
+        if any(kw.lower() in msg.lower() for kw in telegram_keywords) or stock_tip_pattern.search(msg)
+    ]
     flagged = len(flagged_messages) > 0
 
+    # ------------------ NLP analysis ------------------
+    nlp_results = []
+    for msg in flagged_messages:
+        doc = nlp(msg)
+        entities = [(ent.text, ent.label_) for ent in doc.ents]
+        sentiment = TextBlob(msg).sentiment.polarity
+        nlp_results.append({
+            "message": msg,
+            "entities": entities,
+            "sentiment": sentiment
+        })
+
+    # ------------------ Update Supabase ------------------
     group_record = supabase.table("groups").select("group_id").eq("invite_link", invite_link).execute()
     if group_record.data:
         group_id = group_record.data[0]["group_id"]
@@ -334,34 +218,131 @@ async def scan_group(invite_link: str):
         }).execute()
         group_id = inserted.data[0]["group_id"]
 
-    for msg in flagged_messages:
-        # reason = "stock_tip_pattern" if stock_tip_pattern.search(msg) else "keyword_match"
-        # Reason tagging
-        if stock_tip_pattern.search(msg):reason = "stock_tip_pattern"
-        elif promotion_pattern.search(msg):reason = "promotion_pattern"
-        elif any(kw.lower() in msg.lower() for kw in keywords):reason = "keyword_match"
-        else:reason = "other"
-
+    for res in nlp_results:
+        reason = "stock_tip_pattern" if stock_tip_pattern.search(res["message"]) else "keyword_match"
         existing = supabase.table("group_messages")\
             .select("message_id")\
             .eq("group_id", group_id)\
-            .eq("message_text", msg)\
+            .eq("message_text", res["message"])\
             .eq("flagged_reason", reason)\
             .execute()
         if not existing.data:
             supabase.table("group_messages").insert({
                 "group_id": group_id,
-                "message_text": msg,
-                "flagged_reason": reason
+                "message_text": res["message"],
+                "flagged_reason": reason,
+                "nlp_entities": str(res["entities"]),
+                "sentiment_score": res["sentiment"]
             }).execute()
 
     return {
         "channel_name": getattr(entity, "title", str(entity.id)),
         "channel_link": invite_link,
         "flagged": flagged,
-        "flagged_messages": flagged_messages
+        "flagged_messages": flagged_messages,
+        "nlp_results": nlp_results
     }
 
+# ------------------ FastAPI Endpoints ------------------
+@app.post("/check-single-link")
+async def check_single_link(data: SingleLink):
+    result = await scan_group(data.invite_link)
+    if result is None:
+        return {"error": "Invalid or unreachable group link."}
+    return result
+
+@app.post("/scan-internet")
+async def trigger_scan_internet(background_tasks: BackgroundTasks):
+    background_tasks.add_task(scan_new_groups)
+    return {"status": "Scanning started"}
+
+@app.get("/joined-groups-count")
+async def trigger_joined_groups_count():
+    dialogs = await client.get_dialogs()
+    count = sum(1 for d in dialogs if getattr(d.entity, "megagroup", False) or getattr(d.entity, "broadcast", False))
+    return {"joined_groups_count": count}
+
+@app.post("/leave-all-groups")
+async def leave_all_groups():
+    SKIP_GROUPS = [-2300365028]
+    dialogs = await client.get_dialogs()
+    left, skipped = [], []
+    for dialog in dialogs:
+        entity = dialog.entity
+        if entity.id in SKIP_GROUPS:
+            skipped.append({"id": entity.id, "title": getattr(entity, "title", "Unknown")})
+            continue
+        try:
+            await client(LeaveChannelRequest(entity))
+            left.append({"id": entity.id, "title": getattr(entity, "title", "Unknown")})
+        except Exception as e:
+            left.append({"id": entity.id, "title": getattr(entity, "title", "Unknown"), "error": str(e)})
+    return {"left": left, "skipped": skipped}
+
+@app.get("/get-messages")
+async def get_messages(limit: int = Query(5, ge=1, le=100)):
+    results = []
+    today = datetime.now(pytz.UTC).date()
+
+    # Fetch only links that are marked valid
+    groups = supabase.table("found_links") \
+        .select("found_id, invite_link, last_scanned_at, valid_link") \
+        .eq("valid_link", True) \
+        .execute()
+
+    groups_data = groups.data or []
+    if not groups_data:
+        print("No valid links found to scan.")
+        return {"results": []}
+
+    # Prioritize never scanned and not scanned today
+    never_scanned = [g for g in groups_data if not g.get("last_scanned_at")]
+    not_scanned_today = [
+        g for g in groups_data 
+        if g.get("last_scanned_at") and datetime.fromisoformat(g["last_scanned_at"]).date() < today
+    ]
+
+    if never_scanned:
+        groups_to_scan = never_scanned
+    elif not_scanned_today:
+        groups_to_scan = not_scanned_today
+    else:
+        groups_to_scan = groups_data
+
+    for i, group in enumerate(groups_to_scan):
+        if i >= limit:
+            break
+
+        invite_link = group["invite_link"]
+        print(f"Starting scan for {invite_link}")
+        
+        result = await scan_group(invite_link)
+
+        if result:
+            if "cooldown" in result:
+                print(f"Flood detected. Cooldown: {result['cooldown']}s for {invite_link}")
+                return {"cooldown": result["cooldown"], "invite_link": invite_link}
+
+            results.append(result)
+            print(f"Scanned {invite_link}, flagged={result['flagged']}")
+
+            # Update last scanned timestamp
+            supabase.table("found_links").update({
+                "last_scanned_at": datetime.now(pytz.UTC).isoformat()
+            }).eq("found_id", group["found_id"]).execute()
+        else:
+            print(f"Skipping {invite_link}, result is None.")
+
+        await asyncio.sleep(2)  # small delay to avoid hitting Telegram too fast
+
+    return {"results": results}
+
+
 # ------------------ Run Server ------------------
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="127.0.0.1", port=8000)
+
+# For Deployment on render
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+

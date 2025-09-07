@@ -54,7 +54,11 @@ export default function Dashboard() {
 
         if (msgError) throw msgError;
 
-        const flaggedMessages = flaggedMsgs.length;
+       const { count, error } = await supabase
+         .from("group_messages")
+         .select("message_id", { count: "exact", head: true });
+
+        const flaggedMessages = count;
 
         // Top 5 groups by number of flagged messages
         const topGroups = await Promise.all(

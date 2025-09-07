@@ -14,10 +14,13 @@ export default function LoginPage({ setSession, onGuestLogin }) {
     setLoading(true);
     setMessage("");
     try {
-      const res = await axios.post("http://localhost:5000/api/signup", {
-        email,
-        password,
-      });
+      const res = await axios.post(
+        "https://scour-server.onrender.com/api/signup",
+        {
+          email,
+          password,
+        }
+      );
       setMessage("Signup successful! Check your email.");
     } catch (err) {
       setMessage(err.response?.data?.error || "Signup failed");
@@ -30,10 +33,13 @@ export default function LoginPage({ setSession, onGuestLogin }) {
     setLoading(true);
     setMessage("");
     try {
-      const res = await axios.post("http://localhost:5000/api/login", {
-        email,
-        password,
-      });
+      const res = await axios.post(
+        "https://scour-server.onrender.com/api/login",
+        {
+          email,
+          password,
+        }
+      );
 
       const token = res.data.session?.access_token;
       if (!token) throw new Error("Login failed: no session returned");
@@ -54,6 +60,8 @@ export default function LoginPage({ setSession, onGuestLogin }) {
     setMessage("");
     try {
       const res = await axios.post("http://localhost:5000/api/guest");
+      // const API_BASE = import.meta.env.VITE_API_BASE_URL;
+      // const res = await axios.post(`${API_BASE}/api/guest`);
       const token = res.data.session?.access_token;
       if (!token) throw new Error("Guest login failed: no session returned");
       localStorage.setItem("token", token);
