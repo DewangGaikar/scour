@@ -23,16 +23,25 @@ import pytz
 # ------------------ Load Env ------------------
 # load_dotenv() commented for loading docker env 
 
-# ------------------ Supabase ------------------
-url = os.getenv("SUPABASE_URL")
-key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-supabase = create_client(url, key)
+# ------------------ Load secrets ------------------
+def load_secrets(file_path="/run/secrets/secrets.txt"):
+    secrets = {}
+    with open(file_path, "r") as f:
+        for line in f:
+            if "=" in line:
+                key, value = line.strip().split("=", 1)
+                secrets[key] = value
+    return secrets
 
-# ------------------ Telegram ------------------
-api_id = os.getenv("API_ID")
-api_hash = os.getenv("API_HASH")
-phone_number = os.getenv("PHONE_NUMBER")
-client = TelegramClient("session_name", api_id, api_hash)
+# Usage
+secrets = load_secrets()
+
+API_ID = secrets.get("API_ID")
+API_HASH = secrets.get("API_HASH")
+PHONE_NUMBER = secrets.get("PHONE_NUMBER")
+SUPABASE_URL = secrets.get("SUPABASE_URL")
+SUPABASE_ANON_KEY = secrets.get("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = secrets.get("SUPABASE_SERVICE_ROLE_KEY")
 
 # ------------------ Keywords & Patterns ------------------
 keywords = [

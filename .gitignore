@@ -6,3 +6,5 @@ __pycache__/
 
 # Ignore Telethon session files
 *.session
+
+secrets/
