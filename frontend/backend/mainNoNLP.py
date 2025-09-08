@@ -21,8 +21,7 @@ from supabase import create_client
 import pytz
 
 # ------------------ Load Env ------------------
-load_dotenv()
-
+load_dotenv() 
 # ------------------ Supabase ------------------
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -35,8 +34,25 @@ phone_number = os.getenv("PHONE_NUMBER")
 client = TelegramClient("session_name", api_id, api_hash)
 
 # ------------------ Keywords & Patterns ------------------
-keywords = ["buy", "sell", "target", "stock", "intraday", "call", "tip"]
-stock_tip_pattern = re.compile(r"(buy|sell)\s+[A-Za-z]+\s+at\s+\d+", re.IGNORECASE)
+keywords = [
+    "intraday call", "stock tip", "trading signal", "nifty", "sensex",
+    "SEBI registered", "premium call", "stock market", "multibagger",
+    "target price", "short term call", "long term call", "pump and dump",
+    "option call", "futures call", "equity research", "paid mentorship",
+    "stock recommendation", "buy above", "sell below", "investment advice"
+]
+
+# Regex patterns
+stock_tip_pattern = re.compile(
+    r"(buy|sell)\s+[A-Z]{2,6}\s+(at|above|below)\s+\d+",
+    re.IGNORECASE
+)
+
+promotion_pattern = re.compile(
+    r"(join\s+premium|subscribe\s+now|limited\s+offer|dm\s+for\s+calls)",
+    re.IGNORECASE
+)
+
 
 # ------------------ SearchWeb Integration ------------------
 telegram_regex = r"(https?://t\.me/[a-zA-Z0-9_]+)"
@@ -289,7 +305,13 @@ async def scan_group(invite_link: str):
         return None
 
     messages = [msg.text for msg in await client.get_messages(entity, limit=100) if msg.text]
-    flagged_messages = [msg for msg in messages if any(kw.lower() in msg.lower() for kw in keywords) or stock_tip_pattern.search(msg)]
+    # flagged_messages = [msg for msg in messages if any(kw.lower() in msg.lower() for kw in keywords) or stock_tip_pattern.search(msg)]
+    flagged_messages = [
+    msg for msg in messages
+    if any(kw.lower() in msg.lower() for kw in keywords)
+    or stock_tip_pattern.search(msg)
+    or promotion_pattern.search(msg)
+]
     flagged = len(flagged_messages) > 0
 
     group_record = supabase.table("groups").select("group_id").eq("invite_link", invite_link).execute()
@@ -312,7 +334,13 @@ async def scan_group(invite_link: str):
         group_id = inserted.data[0]["group_id"]
 
     for msg in flagged_messages:
-        reason = "stock_tip_pattern" if stock_tip_pattern.search(msg) else "keyword_match"
+        # reason = "stock_tip_pattern" if stock_tip_pattern.search(msg) else "keyword_match"
+        # Reason tagging
+        if stock_tip_pattern.search(msg):reason = "stock_tip_pattern"
+        elif promotion_pattern.search(msg):reason = "promotion_pattern"
+        elif any(kw.lower() in msg.lower() for kw in keywords):reason = "keyword_match"
+        else:reason = "other"
+
         existing = supabase.table("group_messages")\
             .select("message_id")\
             .eq("group_id", group_id)\

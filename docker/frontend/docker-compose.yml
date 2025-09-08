@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    secrets:
+      - api_id
+      - api_hash
+      - phone_number
+      - supabase_url
+      - supabase_anon_key
+      - supabase_service_role_key
+
+  scour:
+    build:
+      context: ./scour
+    env_file:
+      - ./scour/.env
+    ports:
+      - "3000:3000"
+
+  server:
+    build:
+      context: ./server
+    env_file:
+      - ./server/.env
+    ports:
+      - "5000:5000"
+
+secrets:
+  api_id:
+    external: true
+  api_hash:
+    external: true
+  phone_number:
+    external: true
+  supabase_url:
+    external: true
+  supabase_anon_key:
+    external: true
+  supabase_service_role_key:
+    external: true

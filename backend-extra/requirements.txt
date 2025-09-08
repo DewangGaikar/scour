@@ -1,0 +1,28 @@
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# Telegram API
+telethon==1.36.0
+
+# Env vars
+python-dotenv==1.0.1
+
+# HTTP requests & scraping
+requests==2.32.3
+beautifulsoup4==4.12.3
+duckduckgo-search==5.3.1
+
+# Supabase client
+supabase==2.10.0
+
+# Timezone handling
+pytz==2024.2
+
+# NLP
+spacy[cpu]==3.7.2
+textblob==0.18.0.post0
+blis==0.7.11
+
+# Utilities
+numpy==1.26.4
