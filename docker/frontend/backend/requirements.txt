@@ -5,7 +5,7 @@ python-dotenv==1.0.1
 requests==2.32.3
 beautifulsoup4==4.12.3
 ddgs>=5.4.0
-supabase==2.10.0
+supabase
 pytz==2024.2
 spacy[cpu]==3.7.2
 textblob==0.18.0.post0

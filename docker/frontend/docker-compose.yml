@@ -2,6 +2,7 @@ services:
   backend:
     build:
       context: ./backend
+    image: frontend_backend:latest
     ports:
       - "8000:8000"
     secrets:
@@ -11,22 +12,29 @@ services:
       - supabase_url
       - supabase_anon_key
       - supabase_service_role_key
-
-  scour:
-    build:
-      context: ./scour
-    env_file:
-      - ./scour/.env
-    ports:
-      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    restart: no
 
   server:
     build:
       context: ./server
-    env_file:
-      - ./server/.env
+    image: frontend_server:latest
     ports:
       - "5000:5000"
+    env_file:
+      - ./server/.env
+    restart: no
+
+  scour:
+    build:
+      context: ./scour
+    image: frontend_scour:latest
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./scour/.env
+    restart: no
 
 secrets:
   api_id:

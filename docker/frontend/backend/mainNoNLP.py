@@ -24,24 +24,34 @@ import pytz
 # load_dotenv() commented for loading docker env 
 
 # ------------------ Load secrets ------------------
-def load_secrets(file_path="/run/secrets/secrets.txt"):
-    secrets = {}
-    with open(file_path, "r") as f:
-        for line in f:
-            if "=" in line:
-                key, value = line.strip().split("=", 1)
-                secrets[key] = value
-    return secrets
+def get_secret(secret_name):
+    path = f"/run/secrets/{secret_name}"
+    with open(path, "r") as file:
+        return file.read().strip()
 
-# Usage
-secrets = load_secrets()
+api_id = get_secret("api_id")
+api_hash = get_secret("api_hash")
+phone_number = get_secret("phone_number")
+supabase_url = get_secret("supabase_url")
+supabase_anon_key = get_secret("supabase_anon_key")
+supabase_service_role_key = get_secret("supabase_service_role_key")
+session_file_path="/app/data/myapp_session.session" #get Session File
 
-API_ID = secrets.get("API_ID")
-API_HASH = secrets.get("API_HASH")
-PHONE_NUMBER = secrets.get("PHONE_NUMBER")
-SUPABASE_URL = secrets.get("SUPABASE_URL")
-SUPABASE_ANON_KEY = secrets.get("SUPABASE_ANON_KEY")
-SUPABASE_SERVICE_ROLE_KEY = secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+# api_id = os.getenv("API_ID")
+# api_hash = os.getenv("API_HASH")
+# phone_number = os.getenv("PHONE_NUMBER")
+# supabase_url = os.getenv("SUPABASE_URL")
+# supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+# supabase_service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+# Initialize Supabase client
+supabase = create_client(supabase_url, supabase_service_role_key)
+
+# Initialize Telegram client
+client = TelegramClient(session_file_path, api_id, api_hash)
+
+
+
 
 # ------------------ Keywords & Patterns ------------------
 keywords = [
@@ -134,7 +144,10 @@ async def scan_new_groups():
 # ------------------ FastAPI ------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if os.path.exists("session_name.session"):
+    if not os.path.exists(session_file_path):
+     raise FileNotFoundError(f"Critical: Secret session file not found at {session_file_path}")
+
+    if os.path.exists("/run/secrets/myapp_session"):
         await client.start()  # uses saved session
     else:
         await client.start(phone=phone_number)  # first-time login, interactive
@@ -144,7 +157,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:3000","http://localhost:5000/"],
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
