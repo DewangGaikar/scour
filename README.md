@@ -111,7 +111,7 @@ npm start
 ## 🚧 Why Secrets Are Not Included
 
 For security reasons, sensitive API keys and secrets (like `API_ID`, `SUPABASE_SERVICE_ROLE_KEY`) are not stored in the repository.  
-Judges or testers must provide their own `.env` files to run the app.
+Testers must use their own `.env` files to run the app.
 
 ## ✅ Recommended `.env.example`
 
